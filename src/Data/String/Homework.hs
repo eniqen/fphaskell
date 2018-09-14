@@ -541,3 +541,134 @@ height (Node a b) = 1 + (max (height a) (height b))
 size (Leaf a) = 1
 size (Node (Leaf a) (Leaf b)) = 3
 size (Node a b) = 1 + size a + size b
+
+4.6.1
+-- Реализуйте представителя класса типов Monoid для типа Xor, в котором mappend выполняет операцию xor.
+
+newtype Xor = Xor { getXor :: Bool}
+    deriving (Eq,Show)
+
+instance Monoid Xor where
+    mempty = Xor False
+    Xor x `mappend` Xor y = Xor (x /= y)
+
+4.6.2
+-- Реализуйте представителя класса типов Monoid для Maybe' a так, чтобы mempty не был равен Maybe' Nothing. Нельзя накладывать никаких дополнительных ограничений на тип a, кроме указанных в условии.
+
+newtype Maybe' a = Maybe' { getMaybe :: Maybe a }
+    deriving (Eq,Show)
+
+instance Monoid a => Monoid (Maybe' a) where
+    mempty = Maybe' $ Just mempty
+    (Maybe' (Just a)) `mappend` (Maybe' (Just b))  = Maybe' $ Just (a `mappend` b)
+    _ `mappend` _ = Maybe' $ Nothing
+
+5.1.1
+-- Определите представителя класса Functor для следующего типа данных, представляющего точку в трёхмерном пространстве:
+instance Functor Point3D where
+    fmap f (Point3D a b c) = (Point3D (f a) (f b) (f c))
+
+5.1.2
+-- Определите представителя класса Functor для типа данных GeomPrimitive, который определён следующим образом:
+--
+-- data GeomPrimitive a = Point (Point3D a) | LineSegment (Point3D a) (Point3D a)
+-- При определении, воспользуйтесь тем, что Point3D уже является представителем класса Functor.
+-- GHCi> fmap (+ 1) $ Point (Point3D 0 0 0)
+-- Point (Point3D 1 1 1)
+-- GHCi> fmap (+ 1) $ LineSegment (Point3D 0 0 0) (Point3D 1 1 1)
+LineSegment (Point3D 1 1 1) (Point3D 2 2 2)
+instance Functor GeomPrimitive where
+    fmap f (Point point)= Point $ fmap f point
+    fmap f (LineSegment pointl pointr)= LineSegment (fmap f pointl) (fmap f pointr)
+
+5.1.3
+-- Определите представителя класса Functor для бинарного дерева, в каждом узле которого хранятся элементы типа Maybe:
+--
+-- data Tree a = Leaf (Maybe a) | Branch (Tree a) (Maybe a) (Tree a) deriving Show
+--
+-- GHCi> words <$> Leaf Nothing
+-- Leaf Nothing
+--
+-- GHCi> words <$> Leaf (Just "a b")
+-- Leaf (Just ["a","b"])
+import Data.Maybe
+instance Functor Tree where
+    fmap _ (Leaf Nothing) = Leaf Nothing
+    fmap g (Leaf (Just a)) = Leaf (Just $ g a)
+    fmap g (Branch l a r) = Branch (fmap g l) (fmap g a) (fmap g r)
+
+
+5.1.4
+-- Определите представителя класса Functor для типов данных Entry и Map. Тип Map представляет словарь, ключами которого являются пары:
+--
+-- data Entry k1 k2 v = Entry (k1, k2) v  deriving Show
+-- data Map k1 k2 v = Map [Entry k1 k2 v]  deriving Show
+--
+-- В результате должно обеспечиваться следующее поведение: fmap применяет функцию к значениям в словаре, не изменяя при этом ключи.
+--
+-- GHCi> fmap (map toUpper) $ Map []
+-- Map []
+--
+-- GHCi> fmap (map toUpper) $ Map [Entry (0, 0) "origin", Entry (800, 0) "right corner"]
+-- Map [Entry (0,0) "ORIGIN",Entry (800,0) "RIGHT CORNER"]
+
+instance Functor (Entry k1 k2) where
+    fmap f (Entry p v) = Entry p (f v)
+
+instance Functor (Map k1 k2) where
+    fmap f (Map xs) = Map (map (fmap f) xs)
+
+
+
+5.2.1
+-- Введём следующий тип:
+--
+-- data Log a = Log [String] a
+-- Реализуйте вычисление с логированием, используя Log. Для начала определите функцию toLogger
+--
+-- toLogger :: (a -> b) -> String -> (a -> Log b)
+
+toLogger :: (a -> b) -> String -> (a -> Log b)
+toLogger f msg  a = Log [msg] (f a)
+
+execLoggers :: a -> (a -> Log b) -> (b -> Log c) -> Log c
+execLoggers v f g =  Log (xs ++ xss)  v'' where
+                     Log xs v' = f v
+                     Log xss v'' = g v'
+
+5.2.2
+-- Функции с логированием из предыдущего задания возвращают в качестве результата значение с некоторой дополнительной информацией в виде списка сообщений. Этот список является контекстом. Реализуйте функцию returnLog
+--
+-- returnLog :: a -> Log a
+
+returnLog :: a -> Log a
+returnLog = Log []
+
+5.2.3
+-- Реализуйте фукцию bindLog
+--
+-- bindLog :: Log a -> (a -> Log b) -> Log b
+-- которая работает подобно оператору >>= для контекста Log.
+bindLog :: Log a -> (a -> Log b) -> Log b
+bindLog (Log c1 a) f = let Log c2 r = f a
+                        in Log (c1 ++ c2) r
+
+5.2.4
+-- Реализованные ранее returnLog и bindLog позволяют объявить тип Log представителем класса Monad:
+-- instance Monad Log where
+--     return = returnLog
+--     (>>=) = bindLog
+-- Используя return и >>=, определите функцию execLoggersList
+--
+-- execLoggersList :: a -> [a -> Log a] -> Log a
+-- которая принимает некоторый элемент, список функций с логированием и возвращает результат последовательного применения всех функций в списке к переданному элементу вместе со списком сообщений, которые возвращались данными функциями:
+--
+-- GHCi> execLoggersList 3 [add1Log, mult2Log, \x -> Log ["multiplied by 100"] (x * 100)]
+-- Log ["added one","multiplied by 2","multiplied by 100"] 800
+
+execLoggersList :: a -> [a -> Log a] -> Log a
+execLoggersList a = foldl (>>=) (return a)
+
+5.3.1
+instance Functor SomeType where
+    fmap f x = x >>= return . f
